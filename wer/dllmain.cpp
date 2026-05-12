@@ -13,6 +13,7 @@
 
 #include "pch.h"
 #include <Windows.h>
+#include <cstdio>
 
 static DWORD WINAPI LoadModThread(LPVOID lpParam) {
     HMODULE hSelf = static_cast<HMODULE>(lpParam);
