@@ -270,7 +270,7 @@ std::vector<HangarShipEntry> ServerAPI::ParseHangarShips(const std::string& json
         HangarShipEntry e;
         // Extract a small window around this ship object
         size_t start = (pos > 200) ? pos - 200 : 0;
-        size_t end   = std::min(json.size(), pos + 400);
+        size_t end   = (std::min)(json.size(), pos + 400);
         std::string chunk = json.substr(start, end - start);
 
         e.shipID    = ParseJsonString(chunk, "ship_id");
