@@ -1,33 +1,73 @@
 @echo off
 :: Dreadnought Revival Launcher
 :: Reverse-engineered from DreadGame-Win64-Shipping.exe:
-::   The game reads GatewayAddress= and GatewayPort= from the command line
-::   via FParse::Value() to locate the WebServicesPlugin HTTP gateway.
-::   No DLL injection is needed to redirect the REST API layer.
-::   The DLL (Dreadnought-client.dll) is still required for EAC bypass.
+::   GatewayAddress= and GatewayPort= are parsed by the game's WebServicesPlugin
+::   via UE4's FParse::Value() to locate the revival HTTP gateway server.
+::   Steam must be running before launching — the game calls SteamAPI_Init()
+::   which reads steam_appid.txt (835860) from the Win64 working directory.
 
 setlocal
 
-:: ---- Configure this to match your revival server ----
+:: ---- Configure these to match your installation ----
 set GATEWAY_HOST=127.0.0.1
 set GATEWAY_PORT=8080
-set GAME_PATH=C:\Program Files (x86)\Steam\steamapps\common\Dreadnought\DreadGame\DreadGame\Binaries\Win64
+:: Path to the Win64 directory containing DreadGame-Win64-Shipping.exe
+set WIN64=C:\Program Files (x86)\Steam\steamapps\common\Dreadnought\DreadGame\DreadGame\Binaries\Win64
 :: -----------------------------------------------------
 
-set EXE=%GAME_PATH%\DreadGame-Win64-Shipping.exe
+set EXE=%WIN64%\DreadGame-Win64-Shipping.exe
+set EAC_DLL=%WIN64%\EasyAntiCheat_x64.dll
+set EAC_DISABLED=%WIN64%\EasyAntiCheat_x64.dll.bak
 
 if not exist "%EXE%" (
-    echo ERROR: Game not found at %EXE%
-    echo Edit GAME_PATH in this script to match your installation.
+    echo ERROR: Game not found at:
+    echo   %EXE%
+    echo Edit WIN64 in this script to match your installation.
     pause
     exit /b 1
 )
 
-echo Starting Dreadnought with Revival Server at %GATEWAY_HOST%:%GATEWAY_PORT%
+:: ---- EAC bypass: rename EasyAntiCheat_x64.dll so EAC plugin fails silently ----
+:: EAC servers have been offline since 2023. Without this, a popup appears on every launch.
+if exist "%EAC_DLL%" (
+    if not exist "%EAC_DISABLED%" (
+        echo [EAC] Disabling EasyAntiCheat (renaming DLL^) ...
+        rename "%EAC_DLL%" "EasyAntiCheat_x64.dll.bak"
+        if errorlevel 1 (
+            echo [EAC] WARNING: Could not rename EAC DLL. Run as Administrator to disable the popup.
+        ) else (
+            echo [EAC] EasyAntiCheat disabled. Restore with: ren "%EAC_DISABLED%" EasyAntiCheat_x64.dll
+        )
+    ) else (
+        echo [EAC] Already disabled.
+    )
+)
+
+:: ---- Ensure steam_appid.txt exists in the Win64 directory ----
+:: The Steam SDK reads this file from the process working directory to know the AppID.
+if not exist "%WIN64%\steam_appid.txt" (
+    echo 835860 > "%WIN64%\steam_appid.txt"
+    echo [Steam] Created steam_appid.txt with AppID 835860
+)
+
+:: ---- Check if Steam is running ----
+tasklist /FI "IMAGENAME eq steam.exe" 2>NUL | find /I "steam.exe" >NUL
+if errorlevel 1 (
+    echo.
+    echo WARNING: Steam does not appear to be running.
+    echo Steam must be running for authentication to work.
+    echo Start Steam, log in, then press any key to continue.
+    echo Press Ctrl+C to cancel.
+    pause
+)
+
+echo.
+echo Starting Dreadnought  -^>  Revival Server at %GATEWAY_HOST%:%GATEWAY_PORT%
+echo Log: %%LOCALAPPDATA%%\DreadGame\Saved\Logs\DreadGame.log
 echo.
 
-:: The game's WebServicesPlugin reads GatewayAddress= and GatewayPort= via FParse::Value().
-:: -log enables the UE4 log file at: %%LOCALAPPDATA%%\DreadGame\Saved\Logs\DreadGame.log
-start "" "%EXE%" -GatewayAddress=%GATEWAY_HOST% -GatewayPort=%GATEWAY_PORT% -log
+:: Launch game with Win64 as the working directory so steam_appid.txt is found.
+:: GatewayAddress= and GatewayPort= are read by WebServicesPlugin via FParse::Value().
+start "" /D "%WIN64%" "%EXE%" -GatewayAddress=%GATEWAY_HOST% -GatewayPort=%GATEWAY_PORT% -log
 
 endlocal
