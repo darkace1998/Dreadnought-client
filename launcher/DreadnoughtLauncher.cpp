@@ -94,8 +94,27 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
         }
     }
 
+    // --- Ensure steam_appid.txt exists in Win64 ---
+    // SteamAPI_Init() reads this file from the process working directory to
+    // identify the AppID (835860 = Dreadnought) when not launched directly
+    // by Steam's game tracking mechanism.  Without it the game logs
+    // "Could not get auth token" and the login flow never completes.
+    std::string steamAppIdFile = win64 + "steam_appid.txt";
+    if (!FileExists(steamAppIdFile)) {
+        HANDLE hFile = CreateFileA(steamAppIdFile.c_str(),
+            GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS,
+            FILE_ATTRIBUTE_NORMAL, nullptr);
+        if (hFile != INVALID_HANDLE_VALUE) {
+            const char* appId = "835860";
+            DWORD written = 0;
+            WriteFile(hFile, appId, (DWORD)strlen(appId), &written, nullptr);
+            CloseHandle(hFile);
+        }
+    }
+
     // --- Launch game ---
-    // Working directory is the Win64 folder so the game finds its assets.
+    // Working directory is the Win64 folder so SteamAPI_Init() finds
+    // steam_appid.txt and the game finds its assets.
     // GatewayAddress= and GatewayPort= are read by the game's
     // WebServicesPlugin via UE4's FParse::Value().
     char cmdLine[MAX_PATH * 2];
