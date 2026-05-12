@@ -1,0 +1,5 @@
+EXPORTS
+    WerReportCreate
+    WerReportAddFile
+    WerReportSetParameter
+    WerReportSubmit

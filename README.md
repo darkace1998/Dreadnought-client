@@ -69,9 +69,9 @@ original launcher so clicking **Play** in Steam runs the revival setup automatic
    ```
 
 5. (Optional) Install the mod DLL for the ImGui overlay:  
-   copy `Dreadnought-client.dll` to  
-   `<Dreadnought root>\DreadGame\DreadGame\Binaries\Win64\`  
-   and rename it `wer.dll`.
+   copy `wer/x64/Release/wer.dll` → `<Win64>\wer.dll`  
+   copy `x64/Release/Dreadnought-client.dll` → `<Win64>\Dreadnought-client.dll`  
+   (**Do not** rename `Dreadnought-client.dll` to `wer.dll` directly — use the dedicated shim.)
 
 6. Click **Play** in Steam — the launcher will:
    - Disable EasyAntiCheat (renames `EasyAntiCheat_x64.dll` → `.bak` on first run — **run as Admin once**)
@@ -125,15 +125,22 @@ The URL can also be changed at runtime in the **Revival Server** tab of the F1 o
 2. Select **Release | x64** and build all.
 3. Outputs:
    - `x64/Release/DreadnoughtLauncher.exe` — Steam launcher
-   - `x64/Release/Dreadnought-client.dll` — optional overlay DLL
+   - `x64/Release/Dreadnought-client.dll` — overlay / EAC hook
+   - `x64/Release/wer.dll` — thin loader shim (place this in Win64, **not** Dreadnought-client.dll)
 
 > The SDK headers (`src/SDK/`) are pre-generated from the UE4 SDK dump — no extra SDK setup needed.
 
 ### DLL installation
 
-1. Copy `Dreadnought-client.dll` to  
-   `<Dreadnought install>\DreadGame\DreadGame\Binaries\Win64\`
-2. Rename to `wer.dll` (DLL search-order hijack — loaded by Windows before the system copy).
+> **Important:** place `wer.dll` (the shim) in Win64 — **not** `Dreadnought-client.dll` directly.
+> Placing the main DLL as `wer.dll` causes `0xc000007b` because the WER exports are missing.
+
+1. Copy both files to `<Dreadnought install>\DreadGame\DreadGame\Binaries\Win64\`:
+   - `wer/x64/Release/wer.dll` → place as `wer.dll`
+   - `x64/Release/Dreadnought-client.dll` → place as `Dreadnought-client.dll`
+
+The shim (`wer.dll`) is loaded first by Windows, exports the required WER functions as stubs,
+then loads `Dreadnought-client.dll` from the same directory.
 
 ---
 
@@ -157,6 +164,11 @@ Dreadnought-client/
    ├── SDK/                     # Generated UE4 SDK package files
    ├── imgui/                   # Dear ImGui (DX11 backend)
    └── kiero/                   # Kiero VMT hook + MinHook
+ wer/
+   ├── dllmain.cpp              # wer.dll shim — WER stubs + loads Dreadnought-client.dll
+   ├── exports.def              # Exported WER function names
+   ├── pch.h / pch.cpp
+   └── wer.vcxproj              # x64-only VS2022 project
  docs/
    ├── integration.md           # Server ↔ client API reference
    └── connection-protocol.md   # Reverse-engineered protocol documentation

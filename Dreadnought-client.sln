@@ -7,6 +7,8 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "Dreadnought-client", "Dread
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "DreadnoughtLauncher", "launcher\DreadnoughtLauncher.vcxproj", "{C3D4E5F6-A7B8-9012-CDEF-123456789012}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "wer", "wer\wer.vcxproj", "{D5E6F7A8-B9C0-1234-DEF0-123456789ABC}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64
@@ -21,6 +23,10 @@ Global
 		{C3D4E5F6-A7B8-9012-CDEF-123456789012}.Debug|x64.Build.0 = Debug|x64
 		{C3D4E5F6-A7B8-9012-CDEF-123456789012}.Release|x64.ActiveCfg = Release|x64
 		{C3D4E5F6-A7B8-9012-CDEF-123456789012}.Release|x64.Build.0 = Release|x64
+		{D5E6F7A8-B9C0-1234-DEF0-123456789ABC}.Debug|x64.ActiveCfg = Debug|x64
+		{D5E6F7A8-B9C0-1234-DEF0-123456789ABC}.Debug|x64.Build.0 = Debug|x64
+		{D5E6F7A8-B9C0-1234-DEF0-123456789ABC}.Release|x64.ActiveCfg = Release|x64
+		{D5E6F7A8-B9C0-1234-DEF0-123456789ABC}.Release|x64.Build.0 = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
