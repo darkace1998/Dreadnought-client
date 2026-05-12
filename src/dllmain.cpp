@@ -266,6 +266,34 @@ void AddErrorMessage(const std::string& message) {
 }
 
 // -----------------------------------------------------------------------
+//  UE4 helper functions (mirrors community mod implementations)
+// -----------------------------------------------------------------------
+
+// Iterate the global objects array and return the last instance of type T.
+template<typename T>
+T* getLastOfType() {
+    auto objects = UObject::FindObjects<T>();
+    if (objects.empty()) return nullptr;
+    return objects.back();
+}
+
+// ProcessEvent hook type — must be declared before first use.
+typedef void (__thiscall* ProcessEvent_t)(UObject*, UFunction*, void*);
+ProcessEvent_t origProcessEvent = nullptr;
+
+// Thin wrapper around the UE4 StaticLoadObject native to load blueprint assets.
+UObject* StaticLoadClass(UClass* ObjectClass, UObject* InOuter, const TCHAR* InName) {
+    if (!ObjectClass || !InName) {
+        AddErrorMessage("StaticLoadClass: null parameter");
+        return nullptr;
+    }
+    // Offset 0x0D78110 — confirmed against Dreadnought shipping build.
+    return reinterpret_cast<UObject*(*)(UClass*, UObject*, const TCHAR*, const TCHAR*, int, void*, bool)>(
+        Globals::ModuleBase + 0x0D78110
+    )(ObjectClass, InOuter, InName, nullptr, 0, nullptr, false);
+}
+
+// -----------------------------------------------------------------------
 //  Thread tracking
 // -----------------------------------------------------------------------
 std::mutex g_threadsMutex;
@@ -371,6 +399,12 @@ LRESULT __stdcall WndProc(const HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPar
 std::mutex g_globalMutex;
 
 void ProcessEventHook(UObject* object, UFunction* function, void* params) {
+    // Always call the original first so game logic is not disrupted
+    if (origProcessEvent)
+        origProcessEvent(object, function, params);
+
+    if (!object || !function) return;
+
     if (!Globals::AmServer) {
         if (function->GetFullName().find("ToggleLoadoutSelection") != std::string::npos) {
             if (params) {
@@ -387,7 +421,7 @@ void ProcessEventHook(UObject* object, UFunction* function, void* params) {
             OnConnectToServer(serverIP, "unknown", "TDM");
 
             std::wstring wCmd = L"open " + Utf8ToWide(serverIP);
-            auto* kismet = getLastOfType<UKismetSystemLibrary>();
+            UKismetSystemLibrary* kismet = getLastOfType<UKismetSystemLibrary>();
             if (kismet && *UWorld::GWorld &&
                 (*UWorld::GWorld)->OwningGameInstance &&
                 (*UWorld::GWorld)->OwningGameInstance->LocalPlayers.Count() > 0) {
@@ -399,7 +433,7 @@ void ProcessEventHook(UObject* object, UFunction* function, void* params) {
 
         if (launchTutorial) {
             launchTutorial = false;
-            auto* kismet = getLastOfType<UKismetSystemLibrary>();
+            UKismetSystemLibrary* kismet = getLastOfType<UKismetSystemLibrary>();
             if (kismet && *UWorld::GWorld &&
                 (*UWorld::GWorld)->OwningGameInstance &&
                 (*UWorld::GWorld)->OwningGameInstance->LocalPlayers.Count() > 0) {
@@ -413,7 +447,7 @@ void ProcessEventHook(UObject* object, UFunction* function, void* params) {
             launchSingleplayer = false;
             if (map >= 0 && map < 11) {
                 std::wstring cmd = L"open " + std::wstring(AVAILABLE_MAPS[map].fileName);
-                auto* kismet = getLastOfType<UKismetSystemLibrary>();
+                UKismetSystemLibrary* kismet = getLastOfType<UKismetSystemLibrary>();
                 if (kismet && *UWorld::GWorld &&
                     (*UWorld::GWorld)->OwningGameInstance &&
                     (*UWorld::GWorld)->OwningGameInstance->LocalPlayers.Count() > 0) {
@@ -452,6 +486,14 @@ HRESULT __stdcall hkPresent(IDXGISwapChain* pSwapChain, UINT SyncInterval, UINT 
         pSwapChain->GetDesc(&desc);
         window = desc.OutputWindow;
         oWndProc = (WNDPROC)SetWindowLongPtr(window, GWLP_WNDPROC, (LONG_PTR)WndProc);
+
+        // Create render target view for the back buffer
+        ID3D11Texture2D* backBuffer = nullptr;
+        pSwapChain->GetBuffer(0, __uuidof(ID3D11Texture2D), (void**)&backBuffer);
+        if (backBuffer) {
+            pDevice->CreateRenderTargetView(backBuffer, nullptr, &mainRenderTargetView);
+            backBuffer->Release();
+        }
 
         InitImGui();
         init.store(true);
@@ -853,16 +895,36 @@ void MainThread() {
     }
 
     if (!Globals::AmServer) {
-        // Hook DirectX Present for ImGui overlay
+        // Initialize MinHook
+        MH_Initialize();
+
+        // Hook DirectX Present for ImGui overlay (via Kiero)
         if (kiero::init(kiero::RenderType::D3D11) == kiero::Status::Success) {
-            kiero::bind(8,  (void**)&oPresent,       (void*)hkPresent);
-            kiero::bind(13, (void**)&oResizeBuffers,  (void*)hkResizeBuffers);
+            kiero::bind(8,  (void**)&oPresent,      (void*)hkPresent);
+            kiero::bind(13, (void**)&oResizeBuffers, (void*)hkResizeBuffers);
         }
+
+        // Hook UObject::ProcessEvent so we can intercept game events.
+        // Offset 0xD5B180 confirmed against Dreadnought shipping build.
+        ProcessEvent_t peTarget = (ProcessEvent_t)(Globals::ModuleBase + 0xD5B180);
+        MH_CreateHook((void*)peTarget,
+                      (void*)ProcessEventHook,
+                      (void**)&origProcessEvent);
+        MH_EnableHook((void*)peTarget);
+
+        // Suppress EAC error popup (offset 0x29FD910)
+        MH_CreateHook((void*)(Globals::ModuleBase + 0x29FD910),
+                      (void*)EACErrorMessageHook,
+                      &origEACErrorMessageHook);
+        MH_EnableHook((void*)(Globals::ModuleBase + 0x29FD910));
+
+        // Hook UGameEngine::Tick to pump our main-thread queue (offset 0x1958C90)
+        MH_CreateHook((void*)(Globals::ModuleBase + 0x1958C90),
+                      (void*)UGameEngineTick,
+                      &OrigUGameEngineTick);
+        MH_EnableHook((void*)(Globals::ModuleBase + 0x1958C90));
     }
 
-    // Hook UGameEngine::Tick
-    // Address lookup is game-version specific; placeholder shown here.
-    // Actual offset must be determined from the SDK or pattern scan.
     LogToFile("[Init] Hooks installed");
 }
 
