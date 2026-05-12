@@ -50,6 +50,15 @@ static std::wstring Utf8ToWide(const std::string& str) {
     return result;
 }
 
+static std::string WideToUtf8(const std::wstring& wstr) {
+    if (wstr.empty()) return {};
+    int size = WideCharToMultiByte(CP_UTF8, 0, wstr.c_str(), -1, nullptr, 0, nullptr, nullptr);
+    if (size <= 0) return {};
+    std::string result(size - 1, '\0');
+    WideCharToMultiByte(CP_UTF8, 0, wstr.c_str(), -1, &result[0], size, nullptr, nullptr);
+    return result;
+}
+
 void AddErrorMessage(const std::string& message);
 
 extern LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
@@ -879,6 +888,61 @@ void UGameEngineTick(UGameEngine* engine, float dt, bool idle) {
 void MainThread() {
     // Load persisted profiles
     g_profileManager.Load();
+
+    // -----------------------------------------------------------------
+    // Configure server URL from revival.cfg and/or command-line args.
+    // Priority: -GatewayAddress= (highest) > revival.cfg > default 127.0.0.1
+    // -----------------------------------------------------------------
+    {
+        // 1. revival.cfg in the process working directory
+        std::ifstream cfgFile("revival.cfg");
+        if (cfgFile.is_open()) {
+            std::string line;
+            while (std::getline(cfgFile, line)) {
+                auto eq = line.find('=');
+                if (eq == std::string::npos) continue;
+                std::string key = line.substr(0, eq);
+                std::string val = line.substr(eq + 1);
+                // Strip trailing CR/LF/spaces
+                while (!val.empty() &&
+                       (val.back() == '\r' || val.back() == '\n' || val.back() == ' '))
+                    val.pop_back();
+                if (key == "ServerURL" && !val.empty()) {
+                    g_serverAPI.baseURL = val;
+                    strncpy_s(g_serverURLBuf, val.c_str(), sizeof(g_serverURLBuf) - 1);
+                    LogToFile("[Config] ServerURL from revival.cfg: " + val);
+                }
+            }
+        }
+
+        // 2. -GatewayAddress=HOST and -GatewayPort=PORT from the game command line.
+        //    These are already passed by launch.bat / launch.ps1, so the mod DLL
+        //    automatically uses the same server address as the game.
+        {
+            std::wstring cmdLine = GetCommandLineW();
+
+            auto findArg = [&](const std::wstring& prefix) -> std::wstring {
+                auto pos = cmdLine.find(prefix);
+                if (pos == std::wstring::npos) return {};
+                pos += prefix.size();
+                auto end = cmdLine.find(L' ', pos);
+                return cmdLine.substr(pos,
+                    end == std::wstring::npos ? std::wstring::npos : end - pos);
+            };
+
+            std::wstring gwHost = findArg(L"-GatewayAddress=");
+            std::wstring gwPort = findArg(L"-GatewayPort=");
+
+            if (!gwHost.empty()) {
+                std::string host = WideToUtf8(gwHost);
+                std::string port = gwPort.empty() ? "8080" : WideToUtf8(gwPort);
+                std::string url  = "http://" + host + ":" + port;
+                g_serverAPI.baseURL = url;
+                strncpy_s(g_serverURLBuf, url.c_str(), sizeof(g_serverURLBuf) - 1);
+                LogToFile("[Config] Server from -GatewayAddress: " + url);
+            }
+        }
+    }
 
     // Wait for game window
     Sleep(INIT_SLEEP_MS);

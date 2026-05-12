@@ -44,11 +44,12 @@ See [`docs/connection-protocol.md`](docs/connection-protocol.md) for full protoc
 
 ---
 
-## Quickstart — no DLL required
+## Quickstart
 
 1. Start the revival server (see [Dreadnought-server](https://github.com/darkace1998/Dreadnought-server)).
-2. Edit `GATEWAY_HOST` in `launch.bat` (or pass `-GatewayHost` to the PowerShell script).
-3. Run the launcher:
+2. Edit `GATEWAY_HOST` in `launch.bat` (or pass `-GatewayHost` to the PowerShell script) to point at your server.
+3. Build the mod DLL (see **Building** below) and place `Dreadnought-client.dll` next to `launch.bat`.
+4. Run the launcher **as Administrator** (needed to rename EAC DLL and write to the game directory):
 
 **Batch:**
 ```bat
@@ -60,20 +61,37 @@ launch.bat
 .\launch.ps1 -GatewayHost 10.0.0.1 -GatewayPort 8080
 ```
 
+The launcher will automatically:
+- Disable EasyAntiCheat (renames the DLL so the popup is suppressed)
+- Copy `Dreadnought-client.dll` as `wer.dll` into the game's Win64 directory (DLL injection via search-order hijack)
+- Create `steam_appid.txt` so SteamAPI_Init() finds the AppID
+- Launch the game pointing at your revival server
+
 The UE4 log is written to `%LOCALAPPDATA%\DreadGame\Saved\Logs\DreadGame.log`.
 Search for `LogWebServicesPlugin` and `LogWebServiceRequest` entries.
 
+Once in-game, press **F1** to toggle the mod overlay (server status, player info, single player / bots, loadout profiles).
+
 ---
 
-## DLL mod (EAC bypass + optional overlay)
+## DLL mod (EAC bypass + overlay)
 
 The C++ DLL (`Dreadnought-client.dll`) is needed to:
 
-- **Bypass EAC** — suppress EasyAntiCheat so the game runs without official servers.
-- **Optional overlay** — F1 debug panel for offline/bot matches and loadout profiles.
+- **Bypass EAC** — hook `EACErrorMessageHook` so the game runs without official servers
+- **Override server URL** — automatically reads `-GatewayAddress=` / `-GatewayPort=` from the game's command line so the ImGui overlay always talks to the same server as the game
+- **ImGui overlay** — F1 panel for single player (bot matches), loadout profiles, and revival server status / player data
 
 The DLL does **not** replicate the REST API — the game handles that natively via
 the `-GatewayAddress=` / `-GatewayPort=` command-line arguments.
+
+### Server URL resolution (priority order)
+
+1. `-GatewayAddress=HOST -GatewayPort=PORT` on the game command line *(highest — set by launcher)*
+2. `ServerURL=http://HOST:PORT` in `revival.cfg` next to the game executable
+3. Default `http://127.0.0.1:8080`
+
+The URL can also be changed at runtime in the **Revival Server** tab of the F1 overlay.
 
 ### Requirements
 
@@ -88,11 +106,16 @@ the `-GatewayAddress=` / `-GatewayPort=` command-line arguments.
 
 > The SDK headers (`src/SDK/`) are pre-generated from the UE4 SDK dump — no extra SDK setup needed.
 
-### Installation
+### Installation (automated)
+
+Place `Dreadnought-client.dll` (or `x64/Release/Dreadnought-client.dll`) next to
+`launch.bat`. The launcher copies it as `wer.dll` into the Win64 directory automatically.
+
+### Installation (manual)
 
 1. Copy `Dreadnought-client.dll` to  
    `<Dreadnought install>\DreadGame\DreadGame\Binaries\Win64\`
-2. Rename to `wer.dll` (DLL search-order hijack — loads before EAC).
+2. Rename to `wer.dll` (DLL search-order hijack — loads before EAC check).
 3. Launch via `launch.bat` or `launch.ps1`.
 
 ---

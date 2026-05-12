@@ -43,6 +43,26 @@ if exist "%EAC_DLL%" (
     )
 )
 
+:: ---- Install mod DLL as wer.dll (DLL search-order hijack) ----
+:: Windows loads wer.dll from the executable directory before the system copy.
+:: This injects the mod into the game process on startup (EAC bypass + ImGui overlay).
+set MOD_DLL=%~dp0Dreadnought-client.dll
+if not exist "%MOD_DLL%" set MOD_DLL=%~dp0x64\Release\Dreadnought-client.dll
+if exist "%MOD_DLL%" (
+    copy /y "%MOD_DLL%" "%WIN64%\wer.dll" >NUL 2>&1
+    if not errorlevel 1 (
+        echo [Mod] wer.dll installed ^(mod DLL active^)
+    ) else (
+        echo [Mod] WARNING: Could not copy mod DLL to Win64 directory.
+        echo        Run as Administrator, or manually copy Dreadnought-client.dll
+        echo        to %WIN64% and rename it to wer.dll.
+    )
+) else (
+    echo [Mod] NOTE: Dreadnought-client.dll not found — build the mod first.
+    echo        Without it, EAC bypass hook and overlay will not be available.
+    echo        The game can still connect to the revival server via -GatewayAddress.
+)
+
 :: ---- Ensure steam_appid.txt exists in the Win64 directory ----
 :: The Steam SDK reads this file from the process working directory to know the AppID.
 if not exist "%WIN64%\steam_appid.txt" (
@@ -68,6 +88,7 @@ echo.
 
 :: Launch game with Win64 as the working directory so steam_appid.txt is found.
 :: GatewayAddress= and GatewayPort= are read by WebServicesPlugin via FParse::Value().
+:: The mod DLL (wer.dll) also reads these args to configure its own server API URL.
 start "" /D "%WIN64%" "%EXE%" -GatewayAddress=%GATEWAY_HOST% -GatewayPort=%GATEWAY_PORT% -log
 
 endlocal
