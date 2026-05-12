@@ -1,0 +1,29 @@
+# Build outputs
+x64/
+Debug/
+Release/
+*.user
+*.aps
+*.ncb
+*.suo
+*.sdf
+*.opensdf
+*.ipch
+*.pch
+*.pdb
+*.ilk
+*.exp
+*.lib
+*.iobj
+*.ipdb
+*.tlog/
+.vs/
+
+# Compiled DLL
+*.dll
+*.exe
+
+# Logs written by the mod at runtime
+mod_debug.log
+profiles.ini
+cfg.txt
