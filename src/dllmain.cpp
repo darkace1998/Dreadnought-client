@@ -272,13 +272,14 @@ void AddErrorMessage(const std::string& message) {
 // Iterate the global objects array and return the last instance of type T.
 template<typename T>
 T* getLastOfType() {
-    auto objects = UObject::FindObjects<T>();
+    auto objects = UObject::template FindObjects<T>();
     if (objects.empty()) return nullptr;
     return objects.back();
 }
 
-// ProcessEvent hook type — must be declared before first use.
-typedef void (__thiscall* ProcessEvent_t)(UObject*, UFunction*, void*);
+// ProcessEvent hook type.
+// No __thiscall — not valid in x64; the default x64 calling convention is used.
+typedef void (* ProcessEvent_t)(UObject*, UFunction*, void*);
 ProcessEvent_t origProcessEvent = nullptr;
 
 // Thin wrapper around the UE4 StaticLoadObject native to load blueprint assets.
@@ -288,9 +289,8 @@ UObject* StaticLoadClass(UClass* ObjectClass, UObject* InOuter, const TCHAR* InN
         return nullptr;
     }
     // Offset 0x0D78110 — confirmed against Dreadnought shipping build.
-    return reinterpret_cast<UObject*(*)(UClass*, UObject*, const TCHAR*, const TCHAR*, int, void*, bool)>(
-        Globals::ModuleBase + 0x0D78110
-    )(ObjectClass, InOuter, InName, nullptr, 0, nullptr, false);
+    typedef UObject* (*StaticLoadClassFn)(UClass*, UObject*, const TCHAR*, const TCHAR*, int, void*, bool);
+    return ((StaticLoadClassFn)(Globals::ModuleBase + 0x0D78110))(ObjectClass, InOuter, InName, nullptr, 0, nullptr, false);
 }
 
 // -----------------------------------------------------------------------
@@ -408,8 +408,8 @@ void ProcessEventHook(UObject* object, UFunction* function, void* params) {
     if (!Globals::AmServer) {
         if (function->GetFullName().find("ToggleLoadoutSelection") != std::string::npos) {
             if (params) {
-                struct { bool IsActive; }* p = decltype(p)(params);
-                g_showProfilePicker = p->IsActive;
+                // params first byte is the IsActive bool
+                g_showProfilePicker = *reinterpret_cast<bool*>(params);
             }
         }
 
@@ -843,8 +843,8 @@ void EndMatchHook(void* p1) {
     LogToFile("[Hook] EndMatch called");
     // Report to revival server (default stats — real values need UE4 parsing)
     OnMatchEnd(0, 0, 0, false);
-    using Fn = void(*)(void*);
-    ((Fn)origEndMatch)(p1);
+    typedef void(*EndMatchFn)(void*);
+    ((EndMatchFn)origEndMatch)(p1);
 }
 
 // -----------------------------------------------------------------------
@@ -869,8 +869,8 @@ void UGameEngineTick(UGameEngine* engine, float dt, bool idle) {
         for (auto& fn : ProcOnMainThreadQueue) fn();
         ProcOnMainThreadQueue.clear();
     }
-    using Fn = void(*)(UGameEngine*, float, bool);
-    ((Fn)OrigUGameEngineTick)(engine, dt, idle);
+    using TickFn = void(*)(UGameEngine*, float, bool);
+    ((TickFn)OrigUGameEngineTick)(engine, dt, idle);
 }
 
 // -----------------------------------------------------------------------
