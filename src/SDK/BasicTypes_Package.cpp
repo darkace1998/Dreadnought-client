@@ -418,7 +418,10 @@ namespace CG
 	 */
 	std::string FName::GetNameA() const
 	{
-		return GetGlobalNames()[ComparisonIndex]->GetAnsiName();
+		if (!GNames) return "None";
+		FNameEntry* entry = GetGlobalNames()[ComparisonIndex];
+		if (!entry) return "None";
+		return entry->GetAnsiName();
 	}
 
 	/**
@@ -429,7 +432,10 @@ namespace CG
 	 */
 	std::wstring FName::GetNameW() const
 	{
-		return GetGlobalNames()[ComparisonIndex]->GetWideName();
+		if (!GNames) return L"None";
+		FNameEntry* entry = GetGlobalNames()[ComparisonIndex];
+		if (!entry) return L"None";
+		return entry->GetWideName();
 	}
 
 	/**

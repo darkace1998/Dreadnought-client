@@ -1097,6 +1097,7 @@ namespace CG
 	 */
 	std::string UObject::GetName() const
 	{
+		if (!this) return "None";
 		std::string name(Name.GetName());
 		if (Name.Number > 0)
 			name += '_' + std::to_string(Name.Number);
