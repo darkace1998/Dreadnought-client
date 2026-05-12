@@ -44,50 +44,71 @@ See [`docs/connection-protocol.md`](docs/connection-protocol.md) for full protoc
 
 ---
 
-## Quickstart
+## Quickstart — launching via Steam
+
+**This is the recommended way.** The `DreadnoughtLauncher.exe` replaces the
+original launcher so clicking **Play** in Steam runs the revival setup automatically.
+
+### First-time setup
 
 1. Start the revival server (see [Dreadnought-server](https://github.com/darkace1998/Dreadnought-server)).
-2. Edit `GATEWAY_HOST` in `launch.bat` (or pass `-GatewayHost` to the PowerShell script) to point at your server.
-3. Build the mod DLL (see **Building** below) and place `Dreadnought-client.dll` next to `launch.bat`.
-4. Run the launcher **as Administrator** (needed to rename EAC DLL and write to the game directory):
 
-**Batch:**
-```bat
-launch.bat
-```
+2. Build both projects from `Dreadnought-client.sln` (Release | x64):
+   - `DreadnoughtLauncher.exe` — Steam launcher replacement
+   - `Dreadnought-client.dll` — optional overlay / EAC hook (rename to `wer.dll`)
 
-**PowerShell:**
-```powershell
-.\launch.ps1 -GatewayHost 10.0.0.1 -GatewayPort 8080
-```
+3. Copy `x64/Release/DreadnoughtLauncher.exe` to the **Dreadnought root directory**  
+   (same folder that already contains the original `DreadnoughtLauncher.exe`).  
+   Overwrite / rename the original.
 
-The launcher will automatically:
-- Disable EasyAntiCheat (renames the DLL so the popup is suppressed)
-- Copy `Dreadnought-client.dll` as `wer.dll` into the game's Win64 directory (DLL injection via search-order hijack)
-- Create `steam_appid.txt` so SteamAPI_Init() finds the AppID
-- Launch the game pointing at your revival server
+4. Copy `launcher/revival.ini` to the same Dreadnought root directory and edit it:
+   ```ini
+   [Revival]
+   GatewayHost=10.0.0.73
+   GatewayPort=8080
+   ```
 
-The UE4 log is written to `%LOCALAPPDATA%\DreadGame\Saved\Logs\DreadGame.log`.
-Search for `LogWebServicesPlugin` and `LogWebServiceRequest` entries.
+5. (Optional) Install the mod DLL for the ImGui overlay:  
+   copy `Dreadnought-client.dll` to  
+   `<Dreadnought root>\DreadGame\DreadGame\Binaries\Win64\`  
+   and rename it `wer.dll`.
+
+6. Click **Play** in Steam — the launcher will:
+   - Disable EasyAntiCheat (renames `EasyAntiCheat_x64.dll` → `.bak` on first run — **run as Admin once**)
+   - Launch `DreadGame-Win64-Shipping.exe` with `-GatewayAddress` and `-GatewayPort` pointing at your server
+
+The UE4 log is at `%LOCALAPPDATA%\DreadGame\Saved\Logs\DreadGame.log`.
+Search for `LogWebServicesPlugin` entries.
 
 Once in-game, press **F1** to toggle the mod overlay (server status, player info, single player / bots, loadout profiles).
 
 ---
 
+## Fallback — launching without Steam
+
+Use `launch.bat` or `launch.ps1` if you need to launch outside Steam:
+
+```bat
+launch.bat
+```
+
+```powershell
+.\launch.ps1 -GatewayHost 10.0.0.73 -GatewayPort 8080
+```
+
+---
+
 ## DLL mod (EAC bypass + overlay)
 
-The C++ DLL (`Dreadnought-client.dll`) is needed to:
+The C++ DLL (`Dreadnought-client.dll`, renamed to `wer.dll`) is optional but provides:
 
-- **Bypass EAC** — hook `EACErrorMessageHook` so the game runs without official servers
-- **Override server URL** — automatically reads `-GatewayAddress=` / `-GatewayPort=` from the game's command line so the ImGui overlay always talks to the same server as the game
+- **EAC bypass hook** — suppresses EasyAntiCheat error dialogs in-process
 - **ImGui overlay** — F1 panel for single player (bot matches), loadout profiles, and revival server status / player data
-
-The DLL does **not** replicate the REST API — the game handles that natively via
-the `-GatewayAddress=` / `-GatewayPort=` command-line arguments.
+- **Auto server URL** — reads `-GatewayAddress=` / `-GatewayPort=` from the game's command line so the overlay always talks to the same server as the game
 
 ### Server URL resolution (priority order)
 
-1. `-GatewayAddress=HOST -GatewayPort=PORT` on the game command line *(highest — set by launcher)*
+1. `-GatewayAddress=HOST -GatewayPort=PORT` from command line *(set by launcher)*
 2. `ServerURL=http://HOST:PORT` in `revival.cfg` next to the game executable
 3. Default `http://127.0.0.1:8080`
 
@@ -101,22 +122,18 @@ The URL can also be changed at runtime in the **Revival Server** tab of the F1 o
 ### Building
 
 1. Open `Dreadnought-client.sln` in Visual Studio 2022.
-2. Select **Release | x64** and build.
-3. Output: `x64/Release/Dreadnought-client.dll`.
+2. Select **Release | x64** and build all.
+3. Outputs:
+   - `x64/Release/DreadnoughtLauncher.exe` — Steam launcher
+   - `x64/Release/Dreadnought-client.dll` — optional overlay DLL
 
 > The SDK headers (`src/SDK/`) are pre-generated from the UE4 SDK dump — no extra SDK setup needed.
 
-### Installation (automated)
-
-Place `Dreadnought-client.dll` (or `x64/Release/Dreadnought-client.dll`) next to
-`launch.bat`. The launcher copies it as `wer.dll` into the Win64 directory automatically.
-
-### Installation (manual)
+### DLL installation
 
 1. Copy `Dreadnought-client.dll` to  
    `<Dreadnought install>\DreadGame\DreadGame\Binaries\Win64\`
-2. Rename to `wer.dll` (DLL search-order hijack — loads before EAC check).
-3. Launch via `launch.bat` or `launch.ps1`.
+2. Rename to `wer.dll` (DLL search-order hijack — loaded by Windows before the system copy).
 
 ---
 
@@ -124,10 +141,14 @@ Place `Dreadnought-client.dll` (or `x64/Release/Dreadnought-client.dll`) next to
 
 ```
 Dreadnought-client/
- launch.bat                   # Windows batch launcher
- launch.ps1                   # PowerShell launcher
+ launch.bat                   # Fallback batch launcher (non-Steam)
+ launch.ps1                   # Fallback PowerShell launcher (non-Steam)
+ launcher/
+   ├── DreadnoughtLauncher.cpp    # Steam launcher EXE source
+   ├── DreadnoughtLauncher.vcxproj
+   └── revival.ini                # Server config (copy to Dreadnought root)
  src/
-   ├── dllmain.cpp              # DLL — EAC bypass + optional ImGui overlay
+   ├── dllmain.cpp              # DLL — EAC bypass + ImGui overlay
    ├── ServerAPI.h/.cpp         # HTTP API client (WinInet)
    ├── UserProfiles.h           # Loadout preset manager
    ├── includes.h               # DX11 / ImGui includes
@@ -150,3 +171,4 @@ Dreadnought-client/
 
 Educational and preservation purposes only.
 Dreadnought and all related assets are property of their respective owners.
+
