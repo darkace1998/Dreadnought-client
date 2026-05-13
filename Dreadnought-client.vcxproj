@@ -62,7 +62,7 @@
       <SubSystem>Windows</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <EnableUAC>false</EnableUAC>
-      <AdditionalDependencies>wininet.lib;d3d11.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
 
@@ -86,7 +86,7 @@
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <EnableUAC>false</EnableUAC>
-      <AdditionalDependencies>wininet.lib;d3d11.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
 
@@ -94,20 +94,6 @@
   <ItemGroup>
     <ClInclude Include="src\framework.h" />
     <ClInclude Include="src\pch.h" />
-    <ClInclude Include="src\includes.h" />
-    <ClInclude Include="src\SDK.h" />
-    <ClInclude Include="src\UserProfiles.h" />
-    <ClInclude Include="src\imgui_stdlib.h" />
-    <ClInclude Include="src\ServerAPI.h" />
-    <ClInclude Include="src\imgui\imconfig.h" />
-    <ClInclude Include="src\imgui\imgui.h" />
-    <ClInclude Include="src\imgui\imgui_impl_dx11.h" />
-    <ClInclude Include="src\imgui\imgui_impl_win32.h" />
-    <ClInclude Include="src\imgui\imgui_internal.h" />
-    <ClInclude Include="src\imgui\imstb_rectpack.h" />
-    <ClInclude Include="src\imgui\imstb_textedit.h" />
-    <ClInclude Include="src\imgui\imstb_truetype.h" />
-    <ClInclude Include="src\kiero\kiero.h" />
     <ClInclude Include="src\kiero\minhook\include\MinHook.h" />
     <ClInclude Include="src\kiero\minhook\src\buffer.h" />
     <ClInclude Include="src\kiero\minhook\src\hde\hde32.h" />
@@ -121,24 +107,11 @@
   <!-- Source files -->
   <ItemGroup>
     <ClCompile Include="src\dllmain.cpp" />
-    <ClCompile Include="src\ServerAPI.cpp" />
-    <ClCompile Include="src\imgui_stdlib.cpp" />
-    <ClCompile Include="src\imgui\imgui.cpp" />
-    <ClCompile Include="src\imgui\imgui_demo.cpp" />
-    <ClCompile Include="src\imgui\imgui_draw.cpp" />
-    <ClCompile Include="src\imgui\imgui_impl_dx11.cpp" />
-    <ClCompile Include="src\imgui\imgui_impl_win32.cpp" />
-    <ClCompile Include="src\imgui\imgui_widgets.cpp" />
-    <ClCompile Include="src\kiero\kiero.cpp" />
     <ClCompile Include="src\kiero\minhook\src\buffer.c" />
     <ClCompile Include="src\kiero\minhook\src\hde\hde32.c" />
     <ClCompile Include="src\kiero\minhook\src\hde\hde64.c" />
     <ClCompile Include="src\kiero\minhook\src\hook.c" />
     <ClCompile Include="src\kiero\minhook\src\trampoline.c" />
-    <ClCompile Include="src\SDK\BasicTypes_Package.cpp" />
-    <ClCompile Include="src\SDK\CoreUObject_Package.cpp" />
-    <ClCompile Include="src\SDK\DreadGame_Package.cpp" />
-    <ClCompile Include="src\SDK\Engine_Package.cpp" />
   </ItemGroup>
 
   <ItemGroup>

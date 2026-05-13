@@ -1,19 +1,33 @@
 // DreadnoughtLauncher.cpp
 // Dreadnought Revival Launcher
 //
-// Place this EXE in the Dreadnought root directory (next to the original
-// DreadnoughtLauncher.exe, replacing it).  Steam launches it when the
-// user clicks Play.
+// Replaces the original Yager/Six-Foot CEF launcher in the Dreadnought
+// root directory.  Steam launches this when the user clicks Play.
 //
-// What it does:
-//   1. Reads revival.ini for GatewayHost / GatewayPort
-//   2. Disables EasyAntiCheat (renames EasyAntiCheat_x64.dll → .bak)
-//   3. Launches DreadGame-Win64-Shipping.exe with -GatewayAddress/-GatewayPort
+// The original launcher (analyzed from the encrypted ZIP embedded in
+// DreadnoughtLauncher.exe) does three things:
+//
+//   1. Get a Steam auth session ticket via steam.dll interop.
+//   2. POST the ticket to profile-api/auth/ via JSON-RPC
+//      `jwt.get.by_steam_ticket` and verify the returned JWT contains
+//      the DREADNOUGHT PLAYER group  (this gate is offline-only now).
+//   3. CreateProcess() Launcher_DreadGame-Win64-Shipping.exe with:
+//        DreadGame ?version=<build> -pak
+//          -GatewayAddress=<host> -GatewayPort=<port>
+//          -YFirmamentAddress=<host> -YFirmamentPort=<port>
+//
+// The JWT is NEVER passed to the game — the game's WebServicesPlugin
+// re-authenticates with the Steam ticket against
+//   POST <GatewayAddress>:<GatewayPort>/api/v1/authentication/login
+// So all this launcher needs to do is set the gateway/firmament args
+// and start the shipping exe; the revival server handles auth itself.
 //
 // Config file (revival.ini, same directory as this EXE):
 //   [Revival]
 //   GatewayHost=10.0.0.73
 //   GatewayPort=8080
+//   YFirmamentHost=10.0.0.73      ; optional, defaults to GatewayHost
+//   YFirmamentPort=48843          ; optional
 
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
@@ -65,8 +79,6 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
     std::string iniPath  = exeDir + "revival.ini";
     std::string win64    = exeDir + "DreadGame\\DreadGame\\Binaries\\Win64\\";
     std::string gameExe  = win64  + "DreadGame-Win64-Shipping.exe";
-    std::string eacDll   = win64  + "EasyAntiCheat_x64.dll";
-    std::string eacBak   = win64  + "EasyAntiCheat_x64.dll.bak";
 
     // Verify the game executable exists
     if (!FileExists(gameExe)) {
@@ -77,22 +89,10 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
     }
 
     // Read server config (falls back to localhost if revival.ini is absent)
-    std::string gwHost = ReadIni(iniPath, "Revival", "GatewayHost", "127.0.0.1");
-    std::string gwPort = ReadIni(iniPath, "Revival", "GatewayPort", "8080");
-
-    // --- EAC bypass ---
-    // Rename EasyAntiCheat_x64.dll so the EAC plugin fails silently.
-    // EAC servers have been offline since 2023; without this a popup
-    // appears on every launch.
-    if (FileExists(eacDll) && !FileExists(eacBak)) {
-        if (!MoveFileA(eacDll.c_str(), eacBak.c_str())) {
-            // Non-fatal: game still runs, user just sees the EAC popup
-            MessageBoxA(nullptr,
-                "Could not disable EasyAntiCheat.\n"
-                "Run the launcher as Administrator to suppress the EAC popup.",
-                "Dreadnought Revival Launcher", MB_ICONWARNING | MB_OK);
-        }
-    }
+    std::string gwHost = ReadIni(iniPath, "Revival", "GatewayHost",    "127.0.0.1");
+    std::string gwPort = ReadIni(iniPath, "Revival", "GatewayPort",    "8080");
+    std::string fmHost = ReadIni(iniPath, "Revival", "YFirmamentHost", gwHost);
+    std::string fmPort = ReadIni(iniPath, "Revival", "YFirmamentPort", "9000");
 
     // --- Ensure steam_appid.txt exists in Win64 ---
     // SteamAPI_Init() reads this file from the process working directory to
@@ -115,12 +115,19 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
     // --- Launch game ---
     // Working directory is the Win64 folder so SteamAPI_Init() finds
     // steam_appid.txt and the game finds its assets.
-    // GatewayAddress= and GatewayPort= are read by the game's
-    // WebServicesPlugin via UE4's FParse::Value().
-    char cmdLine[MAX_PATH * 2];
+    //
+    // -GatewayAddress / -GatewayPort   — REST gateway (WebServicesPlugin)
+    // -YFirmamentAddress / -YFirmamentPort — MMOG WebSocket server
+    //
+    // Both pairs are read by the game via UE4's FParse::Value(), matching
+    // the original launcher's workflow.json `launchGame` command line.
+    char cmdLine[MAX_PATH * 4];
     snprintf(cmdLine, sizeof(cmdLine),
-             "\"%s\" -GatewayAddress=%s -GatewayPort=%s -log",
-             gameExe.c_str(), gwHost.c_str(), gwPort.c_str());
+             "\"%s\" -GatewayAddress=%s -GatewayPort=%s "
+             "-YFirmamentAddress=%s -YFirmamentPort=%s -log",
+             gameExe.c_str(),
+             gwHost.c_str(), gwPort.c_str(),
+             fmHost.c_str(), fmPort.c_str());
 
     STARTUPINFOA si = {};
     PROCESS_INFORMATION pi = {};
