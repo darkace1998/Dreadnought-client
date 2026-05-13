@@ -33,8 +33,15 @@
 #define WIN32_LEAN_AND_MEAN
 #endif
 #include <Windows.h>
+#include <wininet.h>
 #include <string>
 #include <cstdio>
+#include <cstring>
+
+#pragma comment(lib, "wininet.lib")
+
+#define CLIENT_VERSION "1.0.0"
+// [INFERRED] Version format matches server config.go version field
 
 // ---------------------------------------------------------------------------
 //  Helpers
@@ -68,6 +75,99 @@ static void ShowError(const std::string& msg) {
                 "Dreadnought Revival Launcher", MB_ICONERROR | MB_OK);
 }
 
+static void PrintWarning(const std::string& msg) {
+    std::fprintf(stdout, "%s\n", msg.c_str());
+    std::fflush(stdout);
+}
+
+static std::string ExtractJsonStringField(const std::string& json, const char* field) {
+    const std::string needle = std::string("\"") + field + "\"";
+    const size_t keyPos = json.find(needle);
+    if (keyPos == std::string::npos) {
+        return "";
+    }
+    const size_t colonPos = json.find(':', keyPos + needle.size());
+    if (colonPos == std::string::npos) {
+        return "";
+    }
+    size_t valuePos = json.find('"', colonPos + 1);
+    if (valuePos == std::string::npos) {
+        return "";
+    }
+    ++valuePos;
+
+    std::string value;
+    bool escaped = false;
+    for (size_t i = valuePos; i < json.size(); ++i) {
+        const char ch = json[i];
+        if (escaped) {
+            value.push_back(ch);
+            escaped = false;
+            continue;
+        }
+        if (ch == '\\') {
+            escaped = true;
+            continue;
+        }
+        if (ch == '"') {
+            return value;
+        }
+        value.push_back(ch);
+    }
+    return "";
+}
+
+static bool HttpGet(const std::string& url, std::string& responseBody) {
+    responseBody.clear();
+
+    HINTERNET internet = InternetOpenA("DreadnoughtRevivalLauncher", INTERNET_OPEN_TYPE_PRECONFIG, nullptr, nullptr, 0);
+    if (!internet) {
+        return false;
+    }
+
+    DWORD timeoutMs = 3000;
+    InternetSetOptionA(internet, INTERNET_OPTION_CONNECT_TIMEOUT, &timeoutMs, sizeof(timeoutMs));
+    InternetSetOptionA(internet, INTERNET_OPTION_RECEIVE_TIMEOUT, &timeoutMs, sizeof(timeoutMs));
+    InternetSetOptionA(internet, INTERNET_OPTION_SEND_TIMEOUT, &timeoutMs, sizeof(timeoutMs));
+
+    HINTERNET request = InternetOpenUrlA(internet, url.c_str(), nullptr, 0,
+                                         INTERNET_FLAG_RELOAD | INTERNET_FLAG_NO_CACHE_WRITE,
+                                         0);
+    if (!request) {
+        InternetCloseHandle(internet);
+        return false;
+    }
+
+    char buffer[1024];
+    DWORD bytesRead = 0;
+    while (InternetReadFile(request, buffer, sizeof(buffer), &bytesRead) && bytesRead > 0) {
+        responseBody.append(buffer, bytesRead);
+        bytesRead = 0;
+    }
+
+    InternetCloseHandle(request);
+    InternetCloseHandle(internet);
+    return !responseBody.empty();
+}
+
+static void WarnOnServerVersionMismatch(const std::string& serverBase) {
+    const std::string pingUrl = serverBase + "/api/v1/ping";
+    std::string responseBody;
+    if (!HttpGet(pingUrl, responseBody)) {
+        PrintWarning("WARNING: Could not reach server at " + pingUrl);
+        return;
+    }
+
+    std::string serverVersion = ExtractJsonStringField(responseBody, "server_version");
+    if (serverVersion.empty()) {
+        serverVersion = ExtractJsonStringField(responseBody, "version");
+    }
+    if (!serverVersion.empty() && serverVersion != CLIENT_VERSION) {
+        PrintWarning("WARNING: Server version " + serverVersion +
+                     " does not match client version " CLIENT_VERSION ". Proceeding anyway.");
+    }
+}
+
 // ---------------------------------------------------------------------------
 //  WinMain — no console window
 // ---------------------------------------------------------------------------
@@ -93,6 +193,9 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
     std::string gwPort = ReadIni(iniPath, "Revival", "GatewayPort",    "8080");
     std::string fmHost = ReadIni(iniPath, "Revival", "YFirmamentHost", gwHost);
     std::string fmPort = ReadIni(iniPath, "Revival", "YFirmamentPort", "9000");
+    std::string serverBase = "http://" + gwHost + ":" + gwPort;
+
+    WarnOnServerVersionMismatch(serverBase);
 
     // --- Ensure steam_appid.txt exists in Win64 ---
     // SteamAPI_Init() reads this file from the process working directory to
